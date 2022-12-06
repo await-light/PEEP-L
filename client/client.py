@@ -1,7 +1,41 @@
+import json
 import socket
 from tkinter import *
 from tkinter.ttk import *
 from threading import Thread
+from websocket import create_connection
+
+class HcThread(Thread):
+	def __init__(self,show_text,enter_text,info):
+		Thread.__init__(self)
+		self.show_text = show_text
+		self.enter_text = enter_text
+		self.info = info
+
+	def hcsend(self,event):
+		self.r.send(json.dumps({"cmd":"chat","text":self.enter_text.get(1.0,END)}))
+		self.enter_text.delete(1.0,END)
+		return "break"
+
+	def run(self):	
+		try:
+			self.r = create_connection("wss://hack.chat/chat-ws")
+		except:
+			print("connect failed")
+		else:
+			self.r.send(json.dumps({
+				"cmd":"join",
+				"nick":f"{self.info[1]} #{self.info[2]}",
+				"channel":self.info[0]}))
+			self.enter_text.bind("<Return>",self.hcsend)
+		while True:
+			try:
+				data = self.r.recv()
+			except:
+				print("report when recving")
+			else:
+				self.show_text.insert(END,f"{data}\n\n")
+				self.show_text.see(END)
 
 class Main:
 	def __init__(self):
@@ -21,9 +55,28 @@ class Main:
 		self.note.pack(fill=BOTH,expand=True)
 
 		self.chatframe = Frame(self.win,relief='ridge',borderwidth=1)
-		self.note.add(self.chatframe,text="Chat")
+		self.note.add(self.chatframe,text="  Chat  ")
+		self.hcclient = Frame(self.win,relief='ridge',borderwidth=1)
+		self.note.add(self.hcclient,text="HackChat")
 		self.forumframe = Frame(self.win,relief='ridge',borderwidth=1)
-		self.note.add(self.forumframe,text="Forum")
+		self.note.add(self.forumframe,text=" Forum ")
+
+		self.style = Style()
+		self.style.configure("my.TNotebook",tabposition="wn")
+		self.hcnote = Notebook(self.hcclient,style="my.TNotebook")
+		self.hcnote.pack(fill=BOTH,expand=True)
+		self.hchome = Frame(self.hcclient,relief='ridge',borderwidth=1)
+		self.hcnote.add(self.hchome,text="  Home  ")
+		self.hclogo_label = Label(self.hchome,text="Hack-Chat Client",font=("Arial",15,"bold"))
+		self.hclogo_label.pack(pady=(25,))
+		self.hcchannel_entry = Entry(self.hchome)
+		self.hcchannel_entry.pack(pady=10)
+		self.hcnick_entry = Entry(self.hchome)
+		self.hcnick_entry.pack(pady=10)
+		self.hcpassword_entry = Entry(self.hchome)
+		self.hcpassword_entry.pack(pady=10)
+		self.hcjoin_button = Button(self.hchome,text="join",command=self.hcjoin)
+		self.hcjoin_button.pack(pady=10)
 
 		self.message_show_text = Text(self.chatframe,width=100,height=34,relief=FLAT)
 		self.message_show_text.grid(column=0,row=0)
@@ -41,6 +94,27 @@ class Main:
 		t.start()
 
 		self.win.mainloop()
+
+	def hcjoin(self):
+		channel = self.hcchannel_entry.get()
+		nick = self.hcnick_entry.get()
+		password = self.hcpassword_entry.get()
+		info = (channel,nick,password)
+		newpage = Frame(self.hcclient,relief='ridge',borderwidth=1)
+		self.hcnote.add(newpage,text="  Page  ")
+		closebutton = Button(newpage,text="close",width=6)
+		closebutton.pack(anchor="ne")
+		message_show_text = Text(newpage,relief=FLAT)
+		message_show_text.pack()
+		message_show_text_bar = Scrollbar(newpage)
+		message_show_text_bar.pack(anchor="e")
+		enter_text = Text(newpage)
+		enter_text.pack()
+		message_show_text_bar.config(command=message_show_text.yview)
+		message_show_text.config(yscrollcommand=message_show_text_bar.set)
+		t = HcThread(message_show_text,enter_text,info)
+		t.setDaemon(True)
+		t.start()
 
 	def send_input_text(self,event):
 		data = self.enter_text.get(1.0,END).strip()
